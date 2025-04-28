@@ -80,28 +80,18 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
 
     setState(() {
       if (selectedRow == null || selectedCol == null) {
-        // Primo tap: seleziona pezzo
         final piece = _game.get(square);
         if (piece != null && piece.color == _game.turn) {
           selectedRow = row;
           selectedCol = col;
-
-          validMoves = [];
-          var moves = _game.moves({'square': square});
-          for (var move in moves) {
-            if (move is Map && move.containsKey('to')) {
-              validMoves.add(move['to']);
-            } else if (move is String) {
-              validMoves.add(move);
-            }
-          }
+          validMoves = getValidMoves(square);
         }
       } else {
-        // Secondo tap: prova a muovere
         final fromSquare = _indexToSquare(selectedRow!, selectedCol!);
         final toSquare = square;
 
         final movingPiece = _game.get(fromSquare);
+
         if (movingPiece != null &&
             movingPiece.type == chess.PieceType.PAWN &&
             ((movingPiece.color == chess.Color.WHITE && toSquare[1] == '8') ||
@@ -122,6 +112,136 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
         }
       }
     });
+  }
+
+  List<String> getValidMoves(String fromSquare) {
+  final piece = _game.get(fromSquare);
+  if (piece == null) return [];
+
+  List<String> moves = [];
+
+  int fromCol = fromSquare.codeUnitAt(0) - 'a'.codeUnitAt(0);
+  int fromRow = 8 - int.parse(fromSquare[1]);
+
+  if (piece.type == chess.PieceType.KNIGHT) {
+    List<List<int>> knightMoves = [
+      [-2, -1], [-2, 1],
+      [-1, -2], [-1, 2],
+      [1, -2], [1, 2],
+      [2, -1], [2, 1],
+    ];
+    for (var move in knightMoves) {
+      int newRow = fromRow + move[0];
+      int newCol = fromCol + move[1];
+      if (_isInsideBoard(newRow, newCol)) {
+        String dest = _indexToSquare(newRow, newCol);
+        final destPiece = _game.get(dest);
+        if (destPiece == null || destPiece.color != piece.color) {
+          moves.add(dest);
+        }
+      }
+    }
+  } else if (piece.type == chess.PieceType.ROOK) {
+    moves.addAll(_getSlidingMoves(fromRow, fromCol, [
+      [-1, 0], [1, 0], [0, -1], [0, 1],
+    ], piece.color));
+  } else if (piece.type == chess.PieceType.BISHOP) {
+    moves.addAll(_getSlidingMoves(fromRow, fromCol, [
+      [-1, -1], [-1, 1], [1, -1], [1, 1],
+    ], piece.color));
+  } else if (piece.type == chess.PieceType.QUEEN) {
+    moves.addAll(_getSlidingMoves(fromRow, fromCol, [
+      [-1, 0], [1, 0], [0, -1], [0, 1],
+      [-1, -1], [-1, 1], [1, -1], [1, 1],
+    ], piece.color));
+  } else if (piece.type == chess.PieceType.KING) {
+    List<List<int>> kingMoves = [
+      [-1, -1], [-1, 0], [-1, 1],
+      [0, -1],          [0, 1],
+      [1, -1], [1, 0], [1, 1],
+    ];
+    for (var move in kingMoves) {
+      int newRow = fromRow + move[0];
+      int newCol = fromCol + move[1];
+      if (_isInsideBoard(newRow, newCol)) {
+        String dest = _indexToSquare(newRow, newCol);
+        final destPiece = _game.get(dest);
+        if (destPiece == null || destPiece.color != piece.color) {
+          moves.add(dest);
+        }
+      }
+    }
+  } else if (piece.type == chess.PieceType.PAWN) {
+    int direction = piece.color == chess.Color.WHITE ? -1 : 1;
+    int startRow = piece.color == chess.Color.WHITE ? 6 : 1;
+
+    int oneRow = fromRow + direction;
+    if (_isInsideBoard(oneRow, fromCol)) {
+      String oneStep = _indexToSquare(oneRow, fromCol);
+      if (_game.get(oneStep) == null) {
+        moves.add(oneStep);
+
+        if (fromRow == startRow) {
+          int twoRow = fromRow + 2 * direction;
+          String twoStep = _indexToSquare(twoRow, fromCol);
+          if (_game.get(twoStep) == null) {
+            moves.add(twoStep);
+          }
+        }
+      }
+    }
+
+    for (int dc in [-1, 1]) {
+      int newCol = fromCol + dc;
+      if (_isInsideBoard(oneRow, newCol)) {
+        String captureSquare = _indexToSquare(oneRow, newCol);
+        final capturePiece = _game.get(captureSquare);
+        if (capturePiece != null && capturePiece.color != piece.color) {
+          moves.add(captureSquare);
+        }
+      }
+    }
+  }
+
+  // Integra le mosse speciali (arrocco, en passant)
+  final specialMoves = _game.generate_moves({'square': fromSquare, 'legal': true});
+  for (var move in specialMoves) {
+    final dest = move.to.toString(); // 👈 qui risolto
+    if (!moves.contains(dest)) {
+      moves.add(dest);
+    }
+  }
+
+  return moves;
+}
+
+
+  bool _isInsideBoard(int row, int col) {
+    return row >= 0 && row < 8 && col >= 0 && col < 8;
+  }
+
+  List<String> _getSlidingMoves(int fromRow, int fromCol, List<List<int>> directions, chess.Color color) {
+    List<String> moves = [];
+    for (var dir in directions) {
+      int newRow = fromRow;
+      int newCol = fromCol;
+      while (true) {
+        newRow += dir[0];
+        newCol += dir[1];
+        if (!_isInsideBoard(newRow, newCol)) break;
+        String dest = _indexToSquare(newRow, newCol);
+        final destPiece = _game.get(dest);
+        if (destPiece == null) {
+          moves.add(dest);
+        } else {
+          if (destPiece.color != color) {
+            moves.add(dest);
+          }
+          break;
+        }
+      }
+    }
+    return moves;
   }
 
   void _showPromotionDialog(String from, String to) {
@@ -260,6 +380,23 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     }
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
