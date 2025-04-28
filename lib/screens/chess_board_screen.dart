@@ -10,6 +10,7 @@ class ChessBoardScreen extends StatefulWidget {
 }
 
 class _ChessBoardScreenState extends State<ChessBoardScreen> {
+  // Scacchiera 8x8: ogni casella contiene un simbolo Unicode o null
   List<List<String?>> board = List.generate(8, (_) => List.filled(8, null));
 
   @override
@@ -19,8 +20,18 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   }
 
   void _setupBoard() {
-    // Qui puoi inizializzare i pezzi sulla scacchiera
-    // Per ora lasciamo vuoto (puoi aggiungere in seguito)
+    // Pezzi neri
+    board[0] = [
+      '♜', '♞', '♝', '♛', '♚', '♝', '♞', '♜'
+    ];
+    board[1] = List.filled(8, '♟');
+
+    // Pezzi bianchi
+    board[6] = List.filled(8, '♙');
+    board[7] = [
+      '♖', '♘', '♗', '♕', '♔', '♗', '♘', '♖'
+    ];
+    // Le altre righe (2, 3, 4, 5) rimangono vuote (null)
   }
 
   @override
@@ -40,10 +51,15 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
             final bool isLight = (row + col) % 2 == 0;
             return Container(
               decoration: BoxDecoration(
-                color: isLight ? Colors.white : Colors.grey,
+                color: isLight ? Colors.brown[200] : Colors.brown[700],
               ),
               child: Center(
-                child: board[row][col] != null ? Text(board[row][col]!) : null,
+                child: Text(
+                  board[row][col] ?? '',
+                  style: TextStyle(
+                    fontSize: 32,
+                  ),
+                ),
               ),
             );
           },
