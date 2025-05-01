@@ -101,6 +101,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
           selectedRow = row;
           selectedCol = col;
           validMoves = getValidMoves(square);
+          print('Hai selezionato $square -> Mosse valide: $validMoves');
         }
       } else {
         final fromSquare = _indexToSquare(selectedRow!, selectedCol!);
@@ -146,19 +147,27 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     });
   }
 
-  List<String> getValidMoves(String fromSquare) {
-    final piece = _game.get(fromSquare);
-    if (piece == null) return [];
+ List<String> getValidMoves(String fromSquare) {
+  final allMoves = _game.generate_moves({'legal': true});
+  return allMoves
+      .where((m) => _squareFromIndex(m.from) == fromSquare)
+      .map((m) => _squareFromIndex(m.to))
+      .toList();
+}
 
-    final specialMoves = _game.generate_moves({'square': fromSquare, 'legal': true});
-    return specialMoves.map((move) => move.to.toString()).toList();
-  }
 
   String _indexToSquare(int row, int col) {
     String file = String.fromCharCode('a'.codeUnitAt(0) + col);
     String rank = (8 - row).toString();
     return '$file$rank';
   }
+
+  String _squareFromIndex(int index) {
+  final file = String.fromCharCode('a'.codeUnitAt(0) + (index % 16));
+  final rank = (8 - (index ~/ 16)).toString();
+  return '$file$rank';
+}
+
 
   void _showPromotionDialog(String from, String to) {
     showDialog(
