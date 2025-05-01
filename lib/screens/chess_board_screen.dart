@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as chess;
 import 'dart:math';
+import 'package:audioplayers/audioplayers.dart';
 
 class ChessBoardScreen extends StatefulWidget {
   final bool vsComputer;
@@ -21,6 +22,20 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   String? lastFrom;
   String? lastTo;
   String? kingInCheckSquare;
+
+  final _audioPlayer = AudioPlayer();
+
+  Future<void> _playCaptureSound() async {
+    try {
+      await _audioPlayer.play(AssetSource('sounds/capture.mp3'));
+    } catch (_) {}
+  }
+
+  Future<void> _playCheckSound() async {
+    try {
+      await _audioPlayer.play(AssetSource('sounds/move-check.mp3'));
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,65 +129,133 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   }
 
   void _onTap(int row, int col) {
-    final square = _indexToSquare(row, col);
+  final square = _indexToSquare(row, col);
 
-    setState(() {
-      if (selectedRow == null || selectedCol == null) {
-        final piece = _game.get(square);
-        if (piece != null && piece.color == _game.turn) {
-          selectedRow = row;
-          selectedCol = col;
-          validMoves = getValidMoves(square);
-          print('Hai selezionato $square -> Mosse valide: $validMoves');
-        }
+  setState(() {
+    if (selectedRow == null || selectedCol == null) {
+      final piece = _game.get(square);
+      if (piece != null && piece.color == _game.turn) {
+        selectedRow = row;
+        selectedCol = col;
+        validMoves = getValidMoves(square);
+      }
+    } else {
+      final fromSquare = _indexToSquare(selectedRow!, selectedCol!);
+      final toSquare = square;
+
+      final possibleMoves = _game.generate_moves({'legal': true});
+      final isValidMove = possibleMoves.any((m) =>
+          _squareFromIndex(m.from) == fromSquare &&
+          _squareFromIndex(m.to) == toSquare);
+
+      if (!isValidMove) {
+        // Reset selezione se la mossa è illegale
+        selectedRow = null;
+        selectedCol = null;
+        validMoves = [];
+        return;
+      }
+
+      final movingPiece = _game.get(fromSquare);
+      final capturedPiece = _game.get(toSquare);
+
+      // Verifica se è una mossa valida di promozione
+      final isPromotionMove = possibleMoves.any((m) =>
+          _squareFromIndex(m.from) == fromSquare &&
+          _squareFromIndex(m.to) == toSquare &&
+          m.promotion != null);
+
+      if (isPromotionMove) {
+        _showPromotionDialog(fromSquare, toSquare);
       } else {
-        final fromSquare = _indexToSquare(selectedRow!, selectedCol!);
-        final toSquare = square;
+        final move = _game.move({'from': fromSquare, 'to': toSquare});
+        if (move != null) {
+          if (capturedPiece != null) _playCaptureSound();
+          lastFrom = fromSquare;
+          lastTo = toSquare;
+          _updateCheckSquare();
+          if (_game.in_check) _playCheckSound();
+          _checkEndGame();
+          selectedRow = null;
+          selectedCol = null;
+          validMoves = [];
 
-        final movingPiece = _game.get(fromSquare);
-
-        if (movingPiece != null &&
-            movingPiece.type == chess.PieceType.PAWN &&
-            ((movingPiece.color == chess.Color.WHITE && toSquare[1] == '8') ||
-             (movingPiece.color == chess.Color.BLACK && toSquare[1] == '1'))) {
-          _showPromotionDialog(fromSquare, toSquare);
-        } else {
-          final move = _game.move({'from': fromSquare, 'to': toSquare});
-          if (move != null) {
-            lastFrom = fromSquare;
-            lastTo = toSquare;
-            _updateCheckSquare();
-            _checkEndGame();
-            selectedRow = null;
-            selectedCol = null;
-            validMoves = [];
-
-            if (widget.vsComputer && _game.turn == chess.Color.BLACK) {
-              _makeComputerMove();
-            }
-          } else {
-            selectedRow = null;
-            selectedCol = null;
-            validMoves = [];
+          if (widget.vsComputer && _game.turn == chess.Color.BLACK) {
+            _makeComputerMove();
           }
+        } else {
+          // Mossa non valida (non dovrebbe succedere, ma per sicurezza)
+          selectedRow = null;
+          selectedCol = null;
+          validMoves = [];
         }
       }
-    });
-  }
+    }
+  });
+}
+
+
 
   void _makeComputerMove() {
     final possibleMoves = _game.generate_moves({'legal': true});
     if (possibleMoves.isNotEmpty) {
       final randomMove = possibleMoves[_random.nextInt(possibleMoves.length)];
+      final toSquare = _squareFromIndex(randomMove.to);
+      final capturedPiece = _game.get(toSquare);
+
       _game.move(randomMove);
+      if (capturedPiece != null) _playCaptureSound();
       lastFrom = _squareFromIndex(randomMove.from);
       lastTo = _squareFromIndex(randomMove.to);
       _updateCheckSquare();
+      if (_game.in_check) _playCheckSound();
       _checkEndGame();
     }
     setState(() {
       validMoves = [];
     });
+  }
+
+  void _showPromotionDialog(String from, String to) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Promozione del Pedone'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _promotionOption('♛', 'q', from, to),
+            _promotionOption('♜', 'r', from, to),
+            _promotionOption('♝', 'b', from, to),
+            _promotionOption('♞', 'n', from, to),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _promotionOption(String pieceSymbol, String value, String from, String to) {
+    return ListTile(
+      leading: Text(
+        pieceSymbol,
+        style: const TextStyle(fontSize: 32),
+      ),
+      title: Text(_pieceName(value)),
+      onTap: () {
+        Navigator.of(context).pop();
+        setState(() {
+          _game.move({'from': from, 'to': to, 'promotion': value});
+          lastFrom = from;
+          lastTo = to;
+          _updateCheckSquare();
+          if (_game.in_check) _playCheckSound();
+          _checkEndGame();
+          selectedRow = null;
+          selectedCol = null;
+          validMoves = [];
+        });
+      },
+    );
   }
 
   void _updateCheckSquare() {
@@ -222,47 +305,6 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     final file = String.fromCharCode('a'.codeUnitAt(0) + (index % 16));
     final rank = (8 - (index ~/ 16)).toString();
     return '$file$rank';
-  }
-
-  void _showPromotionDialog(String from, String to) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Promozione del Pedone'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _promotionOption('♛', 'q', from, to),
-            _promotionOption('♜', 'r', from, to),
-            _promotionOption('♝', 'b', from, to),
-            _promotionOption('♞', 'n', from, to),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _promotionOption(String pieceSymbol, String value, String from, String to) {
-    return ListTile(
-      leading: Text(
-        pieceSymbol,
-        style: const TextStyle(fontSize: 32),
-      ),
-      title: Text(_pieceName(value)),
-      onTap: () {
-        Navigator.of(context).pop();
-        setState(() {
-          _game.move({'from': from, 'to': to, 'promotion': value});
-          lastFrom = from;
-          lastTo = to;
-          _updateCheckSquare();
-          _checkEndGame();
-          selectedRow = null;
-          selectedCol = null;
-          validMoves = [];
-        });
-      },
-    );
   }
 
   void _checkEndGame() {
@@ -344,6 +386,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     }
   }
 }
+
 
 
 
