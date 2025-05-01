@@ -5,15 +5,16 @@ import 'package:audioplayers/audioplayers.dart';
 
 class ChessBoardScreen extends StatefulWidget {
   final bool vsComputer;
+  final int aiDepth;  // Aggiungi il parametro per la profondità
 
-  const ChessBoardScreen({Key? key, required this.vsComputer}) : super(key: key);
+  const ChessBoardScreen({Key? key, required this.vsComputer, this.aiDepth = 2}) : super(key: key);
 
   @override
   _ChessBoardScreenState createState() => _ChessBoardScreenState();
 }
 
 class _ChessBoardScreenState extends State<ChessBoardScreen> {
-  chess.Chess _game = chess.Chess();
+  chess.Chess _game = chess.Chess();  // Variabile _game definita qui
   int? selectedRow;
   int? selectedCol;
   List<String> validMoves = [];
@@ -26,6 +27,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   List<String> _moveHistory = [];
   List<chess.Piece> _whiteCaptured = [];
   List<chess.Piece> _blackCaptured = [];
+  String? lastComputerMove; // Nuovo campo per l'ultima mossa dell'IA
 
   Future<void> _playCaptureSound() async {
     try {
@@ -58,11 +60,11 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
             flex: 1,
             child: Column(
               children: [
-                Expanded(child: _buildMoveHistory()),
+                Expanded(child: _buildMoveHistory()), // Metodo per visualizzare lo storico delle mosse
                 const Divider(),
                 Container(
                   color: Colors.grey[300],
-                  child: _buildCapturedPieces(),
+                  child: _buildCapturedPieces(), // Metodo per visualizzare i pezzi catturati
                 ),
               ],
             ),
@@ -72,6 +74,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     );
   }
 
+  // Metodo per costruire la scacchiera
   Widget _buildChessBoard() {
     return GridView.builder(
       itemCount: 64,
@@ -87,6 +90,8 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
         bool isMoveHint = validMoves.contains(square);
         bool isLastMove = (square == lastFrom || square == lastTo);
         bool isCheckSquare = (square == kingInCheckSquare);
+        bool isLastComputerMoveFrom = (square == lastComputerMove?.split(' → ').first); // evidenzia la casella di partenza dell'IA
+        bool isLastComputerMoveTo = (square == lastComputerMove?.split(' → ').last); // evidenzia la casella di arrivo dell'IA
 
         return GestureDetector(
           onTap: () => _onTap(row, col),
@@ -100,7 +105,11 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
                           ? Colors.orange[300]
                           : isLastMove
                               ? Colors.yellow[300]
-                              : (isLight ? Colors.brown[200] : Colors.brown[700]),
+                              : isLastComputerMoveFrom
+                                  ? Colors.green[300] // Evidenzia la partenza dell'IA
+                                  : isLastComputerMoveTo
+                                      ? Colors.blue[300] // Evidenzia l'arrivo dell'IA
+                                      : (isLight ? Colors.brown[200] : Colors.brown[700]),
                   border: Border.all(color: Colors.black),
                 ),
               ),
@@ -156,53 +165,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     );
   }
 
-  Widget _buildMoveHistory() {
-    return ListView.builder(
-      itemCount: _moveHistory.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          dense: true,
-          title: Text('${index + 1}. ${_moveHistory[index]}'),
-        );
-      },
-    );
-  }
-
-  Widget _buildCapturedPieces() {
-    int pieceValue(chess.PieceType type) {
-      switch (type) {
-        case chess.PieceType.PAWN:
-          return 1;
-        case chess.PieceType.KNIGHT:
-        case chess.PieceType.BISHOP:
-          return 3;
-        case chess.PieceType.ROOK:
-          return 5;
-        case chess.PieceType.QUEEN:
-          return 9;
-        default:
-          return 0;
-      }
-    }
-
-    int whiteScore = _whiteCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
-    int blackScore = _blackCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
-
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("Bianco (Tot: $whiteScore):"),
-          Wrap(children: _whiteCaptured.map(_pieceImage).toList()),
-          const SizedBox(height: 8),
-          Text("Nero (Tot: $blackScore):"),
-          Wrap(children: _blackCaptured.map(_pieceImage).toList()),
-        ],
-      ),
-    );
-  }
-
+  // Metodo per la selezione delle mosse e il loro aggiornamento
   void _onTap(int row, int col) {
     final square = _indexToSquare(row, col);
 
@@ -272,57 +235,139 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     });
   }
 
-  void _makeComputerMove() {
+  // Metodo per fare il movimento del computer
+  void _makeComputerMove() async {
     final possibleMoves = _game.generate_moves({'legal': true});
     if (possibleMoves.isNotEmpty) {
-      final randomMove = possibleMoves[_random.nextInt(possibleMoves.length)];
-      final toSquare = _squareFromIndex(randomMove.to);
-      final capturedPiece = _game.get(toSquare);
+      chess.Move bestMove;
 
-      _game.move(randomMove);
-      if (capturedPiece != null) {
-        _playCaptureSound();
-        if (capturedPiece.color == chess.Color.WHITE) {
-          _whiteCaptured.add(capturedPiece);
-        } else {
-          _blackCaptured.add(capturedPiece);
+      // Se la modalità è facile, scegli una mossa a caso
+      if (widget.aiDepth == 2) {
+        bestMove = possibleMoves[_random.nextInt(possibleMoves.length)];
+      } else {
+        // Se la modalità è medio o difficile, usa Alpha-Beta Pruning
+        bestMove = _findBestMove(possibleMoves, widget.aiDepth);
+      }
+
+      await Future.delayed(const Duration(milliseconds: 500)); // Ritardo per simulare il pensiero dell'IA
+      _game.move(bestMove);
+
+      // Aggiungi la mossa dell'IA nello storico
+      String algebraicNotation = _convertToAlgebraicNotation(
+        _squareFromIndex(bestMove.from),
+        _squareFromIndex(bestMove.to),
+        _game.get(_squareFromIndex(bestMove.from)),
+        _game.get(_squareFromIndex(bestMove.to)),
+        false, // Perché non è una promozione in questo caso
+      );
+      setState(() {
+        lastComputerMove = '${_squareFromIndex(bestMove.from)} → ${_squareFromIndex(bestMove.to)}'; // Registra anche la casella di arrivo
+        _moveHistory.add(algebraicNotation); // Aggiungi la mossa nel registro
+      });
+      _updateGameState();
+    }
+  }
+
+    chess.Move _findBestMove(List<chess.Move> possibleMoves, int depth) {
+    int bestValue = -10000;
+    chess.Move? bestMove;
+
+    for (var move in possibleMoves) {
+      _game.move(move); // Simula la mossa
+      int boardValue = _minimaxAlphaBeta(depth - 1, -10000, 10000, false);
+      _game.undo(); // Annula la mossa
+
+      if (boardValue > bestValue) {
+        bestValue = boardValue;
+        bestMove = move;
+      }
+    }
+    return bestMove!;
+  }
+
+  int _minimaxAlphaBeta(int depth, int alpha, int beta, bool isMaximizingPlayer) {
+    if (depth == 0) {
+      return _evaluateBoard(); // Valutazione della scacchiera
+    }
+
+    List<chess.Move> possibleMoves = _game.generate_moves({'legal': true});
+
+    if (isMaximizingPlayer) {
+      int maxEval = -10000;
+      for (var move in possibleMoves) {
+        _game.move(move); // Simula la mossa
+        int eval = _minimaxAlphaBeta(depth - 1, alpha, beta, false);
+        _game.undo(); // Annula la mossa
+
+        maxEval = max(maxEval, eval);
+        alpha = max(alpha, eval);
+        if (beta <= alpha) {
+          break; // Potatura
         }
       }
-      _moveHistory.add('${_squareFromIndex(randomMove.from)} → ${_squareFromIndex(randomMove.to)}');
-      lastFrom = _squareFromIndex(randomMove.from);
-      lastTo = _squareFromIndex(randomMove.to);
-      _updateCheckSquare();
-      if (_game.in_check) _playCheckSound();
-      _checkEndGame();
-    }
-    setState(() {
-      validMoves = [];
-    });
-  }
-
-  void _updateCheckSquare() {
-    if (_game.in_check) {
-      final color = _game.turn;
-      final kingSquare = _findKingSquare(color);
-      kingInCheckSquare = kingSquare;
+      return maxEval;
     } else {
-      kingInCheckSquare = null;
+      int minEval = 10000;
+      for (var move in possibleMoves) {
+        _game.move(move); // Simula la mossa
+        int eval = _minimaxAlphaBeta(depth - 1, alpha, beta, true);
+        _game.undo(); // Annula la mossa
+
+        minEval = min(minEval, eval);
+        beta = min(beta, eval);
+        if (beta <= alpha) {
+          break; // Potatura
+        }
+      }
+      return minEval;
     }
   }
 
-  String? _findKingSquare(chess.Color color) {
+  int _evaluateBoard() {
+    int evaluation = 0;
+
+    // Aggiungi valore ai pezzi
     for (var file in 'abcdefgh'.split('')) {
       for (var rank in '12345678'.split('')) {
         final square = '$file$rank';
         final piece = _game.get(square);
-        if (piece != null &&
-            piece.type == chess.PieceType.KING &&
-            piece.color == color) {
-          return square;
+        if (piece != null) {
+          int pieceValue = 0;
+          switch (piece.type) {
+            case chess.PieceType.PAWN:
+              pieceValue = 1;
+              break;
+            case chess.PieceType.KNIGHT:
+            case chess.PieceType.BISHOP:
+              pieceValue = 3;
+              break;
+            case chess.PieceType.ROOK:
+              pieceValue = 5;
+              break;
+            case chess.PieceType.QUEEN:
+              pieceValue = 9;
+              break;
+            case chess.PieceType.KING:
+              pieceValue = 100;
+              break;
+          }
+
+          // Considera il colore del pezzo
+          if (piece.color == chess.Color.WHITE) {
+            evaluation += pieceValue;
+          } else {
+            evaluation -= pieceValue;
+          }
         }
       }
     }
-    return null;
+
+    // Considera se il re è sotto scacco o meno
+    if (_game.in_check) {
+      evaluation += (_game.turn == chess.Color.WHITE) ? -50 : 50;
+    }
+
+    return evaluation;
   }
 
   List<String> getValidMoves(String fromSquare) {
@@ -343,6 +388,89 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     final file = String.fromCharCode('a'.codeUnitAt(0) + (index % 16));
     final rank = (8 - (index ~/ 16)).toString();
     return '$file$rank';
+  }
+
+  // Metodo per visualizzare i pezzi catturati
+  Widget _buildCapturedPieces() {
+    int pieceValue(chess.PieceType type) {
+      switch (type) {
+        case chess.PieceType.PAWN:
+          return 1;
+        case chess.PieceType.KNIGHT:
+        case chess.PieceType.BISHOP:
+          return 3;
+        case chess.PieceType.ROOK:
+          return 5;
+        case chess.PieceType.QUEEN:
+          return 9;
+        default:
+          return 0;
+      }
+    }
+
+    int whiteScore = _whiteCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
+    int blackScore = _blackCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
+
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("Bianco (Tot: $whiteScore):"),
+          Wrap(children: _whiteCaptured.map(_pieceImage).toList()),
+          const SizedBox(height: 8),
+          Text("Nero (Tot: $blackScore):"),
+          Wrap(children: _blackCaptured.map(_pieceImage).toList()),
+        ],
+      ),
+    );
+  }
+
+  // Metodo per aggiornare lo stato del gioco
+  void _updateGameState() {
+    setState(() {
+      validMoves = [];
+    });
+  }
+
+  // Metodo per aggiornare la posizione del re in scacco
+  void _updateCheckSquare() {
+    if (_game.in_check) {
+      final color = _game.turn;
+      final kingSquare = _findKingSquare(color); // Trova la posizione del re
+      kingInCheckSquare = kingSquare;
+    } else {
+      kingInCheckSquare = null; // Re non è in scacco
+    }
+  }
+
+  // Metodo per trovare la posizione del re (se il re è sotto scacco)
+  String? _findKingSquare(chess.Color color) {
+    for (var file in 'abcdefgh'.split('')) {
+      for (var rank in '12345678'.split('')) {
+        final square = '$file$rank';
+        final piece = _game.get(square);
+        if (piece != null &&
+            piece.type == chess.PieceType.KING &&
+            piece.color == color) {
+          return square;
+        }
+      }
+    }
+    return null; // Se il re non è trovato (non dovrebbe mai succedere)
+  }
+
+  // Metodo per visualizzare lo storico delle mosse
+  Widget _buildMoveHistory() {
+    return ListView.builder(
+      itemCount: _moveHistory.length,
+      itemBuilder: (context, index) {
+        return ListTile(
+          dense: true,
+          title: Text('${index + 1}. ${_moveHistory[index]}'),
+        );
+      },
+    );
   }
 
   void _checkEndGame() {
@@ -498,6 +626,23 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     return 'Q';  // Regina per promozioni
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
