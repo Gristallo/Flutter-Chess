@@ -18,6 +18,10 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   List<String> validMoves = [];
   final _random = Random();
 
+  String? lastFrom;
+  String? lastTo;
+  String? kingInCheckSquare;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -38,6 +42,8 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
 
             bool isSelected = (selectedRow == row && selectedCol == col);
             bool isMoveHint = validMoves.contains(square);
+            bool isLastMove = (square == lastFrom || square == lastTo);
+            bool isCheckSquare = (square == kingInCheckSquare);
 
             return GestureDetector(
               onTap: () => _onTap(row, col),
@@ -47,23 +53,39 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
                     decoration: BoxDecoration(
                       color: isSelected
                           ? Colors.red
-                          : (isLight ? Colors.brown[200] : Colors.brown[700]),
+                          : isCheckSquare
+                              ? Colors.orange[300]
+                              : isLastMove
+                                  ? Colors.yellow[300]
+                                  : (isLight ? Colors.brown[200] : Colors.brown[700]),
                       border: Border.all(color: Colors.black),
-                    ),
-                    child: Center(
-                      child: piece != null ? _pieceImage(piece) : null,
                     ),
                   ),
                   if (isMoveHint)
+                    piece != null
+                        ? Center(
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.blueAccent, width: 3),
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.blue.withOpacity(0.6),
+                              ),
+                            ),
+                          ),
+                  if (piece != null)
                     Center(
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.blue.withOpacity(0.6),
-                        ),
-                      ),
+                      child: _pieceImage(piece),
                     ),
                 ],
               ),
@@ -117,6 +139,9 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
         } else {
           final move = _game.move({'from': fromSquare, 'to': toSquare});
           if (move != null) {
+            lastFrom = fromSquare;
+            lastTo = toSquare;
+            _updateCheckSquare();
             _checkEndGame();
             selectedRow = null;
             selectedCol = null;
@@ -140,6 +165,9 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     if (possibleMoves.isNotEmpty) {
       final randomMove = possibleMoves[_random.nextInt(possibleMoves.length)];
       _game.move(randomMove);
+      lastFrom = _squareFromIndex(randomMove.from);
+      lastTo = _squareFromIndex(randomMove.to);
+      _updateCheckSquare();
       _checkEndGame();
     }
     setState(() {
@@ -147,14 +175,42 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     });
   }
 
- List<String> getValidMoves(String fromSquare) {
-  final allMoves = _game.generate_moves({'legal': true});
-  return allMoves
-      .where((m) => _squareFromIndex(m.from) == fromSquare)
-      .map((m) => _squareFromIndex(m.to))
-      .toList();
-}
+  void _updateCheckSquare() {
+    if (_game.in_check) {
+      final color = _game.turn;
+      final kingSquare = _findKingSquare(color);
+      setState(() {
+        kingInCheckSquare = kingSquare;
+      });
+    } else {
+      setState(() {
+        kingInCheckSquare = null;
+      });
+    }
+  }
 
+  String? _findKingSquare(chess.Color color) {
+    for (var file in 'abcdefgh'.split('')) {
+      for (var rank in '12345678'.split('')) {
+        final square = '$file$rank';
+        final piece = _game.get(square);
+        if (piece != null &&
+            piece.type == chess.PieceType.KING &&
+            piece.color == color) {
+          return square;
+        }
+      }
+    }
+    return null;
+  }
+
+  List<String> getValidMoves(String fromSquare) {
+    final allMoves = _game.generate_moves({'legal': true});
+    return allMoves
+        .where((m) => _squareFromIndex(m.from) == fromSquare)
+        .map((m) => _squareFromIndex(m.to))
+        .toList();
+  }
 
   String _indexToSquare(int row, int col) {
     String file = String.fromCharCode('a'.codeUnitAt(0) + col);
@@ -163,11 +219,10 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   }
 
   String _squareFromIndex(int index) {
-  final file = String.fromCharCode('a'.codeUnitAt(0) + (index % 16));
-  final rank = (8 - (index ~/ 16)).toString();
-  return '$file$rank';
-}
-
+    final file = String.fromCharCode('a'.codeUnitAt(0) + (index % 16));
+    final rank = (8 - (index ~/ 16)).toString();
+    return '$file$rank';
+  }
 
   void _showPromotionDialog(String from, String to) {
     showDialog(
@@ -198,6 +253,9 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
         Navigator.of(context).pop();
         setState(() {
           _game.move({'from': from, 'to': to, 'promotion': value});
+          lastFrom = from;
+          lastTo = to;
+          _updateCheckSquare();
           _checkEndGame();
           selectedRow = null;
           selectedCol = null;
@@ -223,6 +281,9 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
                   selectedRow = null;
                   selectedCol = null;
                   validMoves = [];
+                  lastFrom = null;
+                  lastTo = null;
+                  kingInCheckSquare = null;
                 });
               },
               child: const Text('Nuova partita'),
@@ -245,6 +306,9 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
                   selectedRow = null;
                   selectedCol = null;
                   validMoves = [];
+                  lastFrom = null;
+                  lastTo = null;
+                  kingInCheckSquare = null;
                 });
               },
               child: const Text('Nuova partita'),
@@ -280,6 +344,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     }
   }
 }
+
 
 
 
