@@ -2,19 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as chess;
 import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
+import '../game_timer.dart';
 
 class ChessBoardScreen extends StatefulWidget {
   final bool vsComputer;
-  final int aiDepth;  // Aggiungi il parametro per la profondità
+  final int aiDepth;
+  final bool useTimer; 
+  final int initialTime;
 
-  const ChessBoardScreen({Key? key, required this.vsComputer, this.aiDepth = 2}) : super(key: key);
+  const ChessBoardScreen({Key? key, required this.vsComputer, this.aiDepth = 2, this.useTimer = false, required this.initialTime}) : super(key: key);
 
   @override
   _ChessBoardScreenState createState() => _ChessBoardScreenState();
 }
 
 class _ChessBoardScreenState extends State<ChessBoardScreen> {
-  chess.Chess _game = chess.Chess();  // Variabile _game definita qui
+  chess.Chess _game = chess.Chess();
   int? selectedRow;
   int? selectedCol;
   List<String> validMoves = [];
@@ -27,7 +30,9 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   List<String> _moveHistory = [];
   List<chess.Piece> _whiteCaptured = [];
   List<chess.Piece> _blackCaptured = [];
-  String? lastComputerMove; // Nuovo campo per l'ultima mossa dell'IA
+  String? lastComputerMove;
+
+  GameTimer? _gameTimer; 
 
   Future<void> _playCaptureSound() async {
     try {
@@ -41,15 +46,77 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     } catch (_) {}
   }
 
- @override
- Widget build(BuildContext context) {
+  @override
+void initState() {
+  super.initState();
+  if (!widget.vsComputer && widget.useTimer) {
+    _gameTimer = GameTimer(
+      onTimeUpdate: _updateTimer,    
+      onGameOver: _handleGameOver,   
+    );
+    _gameTimer?.start(widget.initialTime);  
+  }
+}
+
+
+void _handleGameOver(String winner) {
+  _gameTimer?.stop(); 
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Tempo Scaduto'),
+      content: Text('$winner ha vinto per tempo!'),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+            setState(() {
+              _game = chess.Chess(); 
+              selectedRow = null;
+              selectedCol = null;
+              validMoves = [];
+              lastFrom = null;
+              lastTo = null;
+              kingInCheckSquare = null;
+              _moveHistory.clear();
+              _whiteCaptured.clear();
+              _blackCaptured.clear();
+            });
+          },
+          child: const Text('Nuova partita'),
+        ),
+      ],
+    ),
+  );
+}
+
+ void _updateTimer(int whiteTime, int blackTime, String currentPlayer) {
+  setState(() {
+    if (currentPlayer == 'Bianco' && _game.turn == chess.Color.WHITE) {
+      _gameTimer?.switchTurn();  
+    } else if (currentPlayer == 'Nero' && _game.turn == chess.Color.BLACK) {
+      _gameTimer?.switchTurn();  
+    }
+  });
+}
+
+
+
+  @override
+  void dispose() {
+    _gameTimer?.stop();
+    super.dispose();
+  }
+
+@override
+Widget build(BuildContext context) {
   return Scaffold(
     appBar: AppBar(
       title: Text(_getTurnText()),
-      backgroundColor: Colors.grey[700],  // Colore scuro per l'AppBar
+      backgroundColor: Colors.grey[700],
     ),
     body: Container(
-      color: Colors.grey[600],  // Colore scuro per il corpo della pagina
+      color: Colors.grey[600],
       child: Row(
         children: [
           Expanded(
@@ -63,11 +130,20 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
             flex: 1,
             child: Column(
               children: [
-                Expanded(child: _buildMoveHistory()),  // Metodo per visualizzare lo storico delle mosse
+                // Visualizza il timer
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    'Bianco: ${_gameTimer?.formatTime(_gameTimer!.blackTime)}\n'  //NOTA: I timer del bianco e del nero sono invertiti: dopo tantissime prove non riuscivo a risolvere, quindi ho risolto direttamente così (brutalmente xD)
+                    'Nero: ${_gameTimer?.formatTime(_gameTimer!.whiteTime)}',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Expanded(child: _buildMoveHistory()),
                 const Divider(),
                 Container(
-                  color: Colors.grey[500],  // Colore ancora più scuro per la visualizzazione dei pezzi catturati
-                  child: _buildCapturedPieces(),  // Metodo per visualizzare i pezzi catturati
+                  color: Colors.grey[500],
+                  child: _buildCapturedPieces(),
                 ),
               ],
             ),
@@ -96,8 +172,8 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
         bool isMoveHint = validMoves.contains(square);
         bool isLastMove = (square == lastFrom || square == lastTo);
         bool isCheckSquare = (square == kingInCheckSquare);
-        bool isLastComputerMoveFrom = (square == lastComputerMove?.split(' → ').first); // evidenzia la casella di partenza dell'IA
-        bool isLastComputerMoveTo = (square == lastComputerMove?.split(' → ').last); // evidenzia la casella di arrivo dell'IA
+        bool isLastComputerMoveFrom = (square == lastComputerMove?.split(' → ').first);
+        bool isLastComputerMoveTo = (square == lastComputerMove?.split(' → ').last);
 
         return GestureDetector(
           onTap: () => _onTap(row, col),
@@ -112,9 +188,9 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
                           : isLastMove
                               ? Colors.yellow[300]
                               : isLastComputerMoveFrom
-                                  ? Colors.green[300] // Evidenzia la partenza dell'IA
+                                  ? Colors.green[300]
                                   : isLastComputerMoveTo
-                                      ? Colors.blue[300] // Evidenzia l'arrivo dell'IA
+                                      ? Colors.blue[300]
                                       : (isLight ? Colors.brown[200] : Colors.brown[700]),
                   border: Border.all(color: Colors.black),
                 ),
@@ -232,6 +308,8 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
             selectedCol = null;
             validMoves = [];
 
+            _gameTimer?.switchTurn();
+
             if (widget.vsComputer && _game.turn == chess.Color.BLACK) {
               _makeComputerMove();
             }
@@ -274,7 +352,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     }
   }
 
-    chess.Move _findBestMove(List<chess.Move> possibleMoves, int depth) {
+  chess.Move _findBestMove(List<chess.Move> possibleMoves, int depth) {
     int bestValue = -10000;
     chess.Move? bestMove;
 
@@ -468,32 +546,31 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
 
   // Metodo per visualizzare lo storico delle mosse
   Widget _buildMoveHistory() {
-  return SingleChildScrollView(
-    scrollDirection: Axis.horizontal,  // Aggiungi la possibilità di scorrere orizzontalmente
-    child: Row(
-      children: List.generate(_moveHistory.length, (index) {
-        String move = _moveHistory[index];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,  // Aggiungi la possibilità di scorrere orizzontalmente
+      child: Row(
+        children: List.generate(_moveHistory.length, (index) {
+          String move = _moveHistory[index];
 
-        // Colora la mossa in base al giocatore (bianco o nero)
-        TextStyle textStyle;
-        if (index % 2 == 0) {
-          textStyle = TextStyle(color: Colors.white); // Mossa del bianco
-        } else {
-          textStyle = TextStyle(color: Colors.black); // Mossa del nero
-        }
+          // Colora la mossa in base al giocatore (bianco o nero)
+          TextStyle textStyle;
+          if (index % 2 == 0) {
+            textStyle = TextStyle(color: Colors.white); // Mossa del bianco
+          } else {
+            textStyle = TextStyle(color: Colors.black); // Mossa del nero
+          }
 
-        return Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text(
-            '${index + 1}. $move',
-            style: textStyle,
-          ),
-        );
-      }),
-    ),
-  );
-}
-
+          return Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              '${index + 1}. $move',
+              style: textStyle,
+            ),
+          );
+        }),
+      ),
+    );
+  }
 
   void _checkEndGame() {
     if (_game.in_checkmate) {
@@ -593,44 +670,43 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     }
   }
 
- String _convertToAlgebraicNotation(
+  String _convertToAlgebraicNotation(
     String fromSquare,
     String toSquare,
     chess.Piece? movingPiece,
     chess.Piece? capturedPiece,
     bool isPromotionMove) {
 
-  String move = '';
+    String move = '';
 
-  // Aggiungi il tipo di pezzo se non è un pedone
-  if (movingPiece != null && movingPiece.type != chess.PieceType.PAWN) {
-    move += _getPieceSymbol(movingPiece.type);
+    // Aggiungi il tipo di pezzo se non è un pedone
+    if (movingPiece != null && movingPiece.type != chess.PieceType.PAWN) {
+      move += _getPieceSymbol(movingPiece.type);
+    }
+
+    move += fromSquare;
+
+    // Aggiungi la cattura se c'è un pezzo catturato
+    if (capturedPiece != null) {
+      move += 'x';
+    }
+
+    move += toSquare;
+
+    // Aggiungi la promozione se è un pedone promosso
+    if (isPromotionMove) {
+      move += '=${_getPromotionPieceSymbol()}';
+    }
+
+    // Aggiungi il segno di scacco (+) o scacco matto (#)
+    if (_game.in_check) {
+      move += '+';
+    } else if (_game.in_checkmate) {
+      move += '#';
+    }
+
+    return move;
   }
-
-  move += fromSquare;
-
-  // Aggiungi la cattura se c'è un pezzo catturato
-  if (capturedPiece != null) {
-    move += 'x';
-  }
-
-  move += toSquare;
-
-  // Aggiungi la promozione se è un pedone promosso
-  if (isPromotionMove) {
-    move += '=${_getPromotionPieceSymbol()}';
-  }
-
-  // Aggiungi il segno di scacco (+) o scacco matto (#)
-  if (_game.in_check) {
-    move += '+';
-  } else if (_game.in_checkmate) {
-    move += '#';
-  }
-
-  return move;
-}
-
 
   String _getPieceSymbol(chess.PieceType type) {
     switch (type) {
