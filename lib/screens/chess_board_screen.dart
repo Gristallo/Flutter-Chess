@@ -41,13 +41,16 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     } catch (_) {}
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_getTurnText()),
-      ),
-      body: Row(
+ @override
+ Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: Text(_getTurnText()),
+      backgroundColor: Colors.grey[700],  // Colore scuro per l'AppBar
+    ),
+    body: Container(
+      color: Colors.grey[600],  // Colore scuro per il corpo della pagina
+      child: Row(
         children: [
           Expanded(
             flex: 2,
@@ -60,19 +63,22 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
             flex: 1,
             child: Column(
               children: [
-                Expanded(child: _buildMoveHistory()), // Metodo per visualizzare lo storico delle mosse
+                Expanded(child: _buildMoveHistory()),  // Metodo per visualizzare lo storico delle mosse
                 const Divider(),
                 Container(
-                  color: Colors.grey[300],
-                  child: _buildCapturedPieces(), // Metodo per visualizzare i pezzi catturati
+                  color: Colors.grey[500],  // Colore ancora più scuro per la visualizzazione dei pezzi catturati
+                  child: _buildCapturedPieces(),  // Metodo per visualizzare i pezzi catturati
                 ),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+
 
   // Metodo per costruire la scacchiera
   Widget _buildChessBoard() {
@@ -462,16 +468,32 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
 
   // Metodo per visualizzare lo storico delle mosse
   Widget _buildMoveHistory() {
-    return ListView.builder(
-      itemCount: _moveHistory.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          dense: true,
-          title: Text('${index + 1}. ${_moveHistory[index]}'),
+  return SingleChildScrollView(
+    scrollDirection: Axis.horizontal,  // Aggiungi la possibilità di scorrere orizzontalmente
+    child: Row(
+      children: List.generate(_moveHistory.length, (index) {
+        String move = _moveHistory[index];
+
+        // Colora la mossa in base al giocatore (bianco o nero)
+        TextStyle textStyle;
+        if (index % 2 == 0) {
+          textStyle = TextStyle(color: Colors.white); // Mossa del bianco
+        } else {
+          textStyle = TextStyle(color: Colors.black); // Mossa del nero
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(
+            '${index + 1}. $move',
+            style: textStyle,
+          ),
         );
-      },
-    );
-  }
+      }),
+    ),
+  );
+}
+
 
   void _checkEndGame() {
     if (_game.in_checkmate) {
@@ -571,39 +593,44 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
     }
   }
 
-  String _convertToAlgebraicNotation(
-      String fromSquare,
-      String toSquare,
-      chess.Piece? movingPiece,
-      chess.Piece? capturedPiece,
-      bool isPromotionMove) {
-    
-    String move = '';
-    
-    if (movingPiece != null && movingPiece.type != chess.PieceType.PAWN) {
-      move += _getPieceSymbol(movingPiece.type);
-    }
-    
-    move += fromSquare;
+ String _convertToAlgebraicNotation(
+    String fromSquare,
+    String toSquare,
+    chess.Piece? movingPiece,
+    chess.Piece? capturedPiece,
+    bool isPromotionMove) {
 
-    if (capturedPiece != null) {
-      move += 'x';
-    }
+  String move = '';
 
-    move += toSquare;
-
-    if (isPromotionMove) {
-      move += '=${_getPromotionPieceSymbol()}';
-    }
-
-    if (_game.in_check) {
-      move += '+';
-    } else if (_game.in_checkmate) {
-      move += '#';
-    }
-
-    return move;
+  // Aggiungi il tipo di pezzo se non è un pedone
+  if (movingPiece != null && movingPiece.type != chess.PieceType.PAWN) {
+    move += _getPieceSymbol(movingPiece.type);
   }
+
+  move += fromSquare;
+
+  // Aggiungi la cattura se c'è un pezzo catturato
+  if (capturedPiece != null) {
+    move += 'x';
+  }
+
+  move += toSquare;
+
+  // Aggiungi la promozione se è un pedone promosso
+  if (isPromotionMove) {
+    move += '=${_getPromotionPieceSymbol()}';
+  }
+
+  // Aggiungi il segno di scacco (+) o scacco matto (#)
+  if (_game.in_check) {
+    move += '+';
+  } else if (_game.in_checkmate) {
+    move += '#';
+  }
+
+  return move;
+}
+
 
   String _getPieceSymbol(chess.PieceType type) {
     switch (type) {
