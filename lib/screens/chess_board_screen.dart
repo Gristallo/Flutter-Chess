@@ -3,6 +3,7 @@ import 'package:chess/chess.dart' as chess;
 import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
 import '../game_timer.dart';
+import 'package:chess_game/services/chess_engine.dart';
 
 class ChessBoardScreen extends StatefulWidget {
   final bool vsComputer;
