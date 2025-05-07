@@ -1,95 +1,129 @@
 package com.example.chess_game
 
-import io.flutter.embedding.android.FlutterActivity
-import io.flutter.plugin.common.MethodChannel
 import android.os.Bundle
-import java.io.File
-import java.io.InputStreamReader
-import java.io.BufferedReader
-import android.content.res.AssetManager
-import java.io.InputStream
-import java.io.OutputStream
+import android.util.Log
+import androidx.annotation.NonNull
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import java.io.*
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.chess_game.stockfish" 
 
+    private val CHANNEL = "com.chess_game.stockfish"
+
+    /*------------------------------------------------------------*/
+    /* Ciclo di vita                                              */
+    /*------------------------------------------------------------*/
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        /* copyStockfishToFile()  */            
+    }
 
-        // Copia Stockfish dalla cartella assets alla directory di esecuzione
-        copyStockfishToFile()
+    override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
 
-        
-        MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result -> 
-            // Gestisci la chiamata dal lato Flutter
-            if (call.method == "getBestMove") {
-                val fen = call.argument<String>("fen")  // Ottieni la posizione FEN dal Dart
-                if (fen != null) {
-                    val bestMove = getBestMoveFromStockfish(fen)
-                    result.success(bestMove)  // Rispondi con la mossa migliore
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+            .setMethodCallHandler { call, result ->
+                if (call.method == "getBestMove") {
+                    val fen   = call.argument<String>("fen")
+                    val depth = call.argument<Int>("depth") ?: 2
+
+                    if (fen == null) {
+                        result.error("INVALID_ARGUMENT", "FEN non valido", null)
+                        return@setMethodCallHandler
+                    }
+
+                    Thread {
+                        val best = getBestMoveFromStockfish(fen, depth)
+                        runOnUiThread { result.success(best) }
+                    }.start()
                 } else {
-                    result.error("INVALID_ARGUMENT", "FEN non valido", null)
+                    result.notImplemented()
                 }
-            } else {
-                result.notImplemented()
             }
-        }
     }
 
-    private fun copyStockfishToFile() {
-        val stockfishFile = File(filesDir, "stockfish")
+    /*------------------------------------------------------------*/
+    /* 1. Copia l’asset e rende eseguibile                        */
+    /*------------------------------------------------------------*/
+    /* private fun copyStockfishToFile() {
+        val dest = File(filesDir, "stockfish")
+        Log.d("SF", "Percorso filesDir: ${dest.absolutePath}")
 
-        if (!stockfishFile.exists()) {
+        if (!dest.exists()) {
             try {
-                // Ottieni il gestore degli asset
-                val assetManager: AssetManager = assets
-                // Apri il file di Stockfish dalla cartella assets
-                val inputStream: InputStream = assetManager.open("stockfish/stockfish")
-                // Crea un OutputStream per scrivere il file nella directory di esecuzione
-                val outputStream: OutputStream = stockfishFile.outputStream()
-
-                // Crea un buffer di byte per copiare i dati
-                val buffer = ByteArray(1024)
-                var length: Int
-                while (inputStream.read(buffer).also { length = it } > 0) {
-                    outputStream.write(buffer, 0, length)
+                // unico binario: assets/stockfish/arm64-v8a/stockfish
+                assets.open("stockfish/arm64-v8a/stockfish").use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
                 }
-                // Chiudi i flussi
-                outputStream.close()
-                inputStream.close()
-
-                // Imposta il file come eseguibile
-                stockfishFile.setExecutable(true)
-            } catch (e: Exception) {
-                e.printStackTrace()
+                Log.d("SF", "Stockfish copiato.")
+            } catch (e: IOException) {
+                Log.e("SF", "Copia fallita: ${e.message}", e)
             }
         }
+
+        // imposta sempre il bit eseguibile
+        val execOK = dest.setExecutable(true, /*ownerOnly =*/ false)
+        Log.d("SF", "chmod +x: $execOK  canExecute=${dest.canExecute()}")
     }
+    */
 
-    private fun getBestMoveFromStockfish(fen: String): String {
-        // Esegui Stockfish usando il FEN come input
-        val stockfish = File(filesDir, "stockfish")  // Ora il binario dovrebbe essere nella directory corretta
-        val process = ProcessBuilder(stockfish.absolutePath, "-fen", fen)
-            .redirectErrorStream(true)
-            .start()
+    /*------------------------------------------------------------*/
+    /* 2. Lancia Stockfish e restituisce bestmove                 */
+    /*------------------------------------------------------------*/
+    private fun getBestMoveFromStockfish(fen: String, depth: Int): String {
 
-        // Leggi l'output di Stockfish per trovare la mossa migliore
-        val reader = BufferedReader(InputStreamReader(process.inputStream))
-        var line: String?
-        var bestMove = ""
+        val enginePath = File(applicationInfo.nativeLibraryDir, "libstockfish.so").absolutePath
+        var process: Process? = null
+        var stdin: BufferedWriter? = null
+        var stdout: BufferedReader? = null
 
-        while (reader.readLine().also { line = it } != null) {
-            if (line!!.startsWith("bestmove")) {
-                bestMove = line!!.substring(9).trim()  // Estrai la mossa migliore
-                break
+        return try {
+            process = ProcessBuilder(enginePath)
+                .redirectErrorStream(true)
+                .start()
+
+            stdin  = process.outputStream.bufferedWriter()
+            stdout = process.inputStream.bufferedReader()
+
+            /* handshake UCI */
+            stdin.apply { write("uci\nisready\n"); flush() }
+            while (stdout.readLine() != "readyok") { /* skip */ }
+
+            /* posizione e calcolo */
+            stdin.apply {
+                write("position fen $fen\n")
+                write("go depth $depth\n")
+                flush()
             }
-        }
 
-        // Attendi che il processo di Stockfish finisca
-        process.waitFor()
-        return bestMove
+            var line: String?
+            var best = ""
+            while (stdout.readLine().also { line = it } != null) {
+                if (line!!.startsWith("bestmove")) {
+                    best = line!!.substringAfter("bestmove").trim()
+                    break
+                }
+            }
+            best
+
+        } catch (e: Exception) {
+            Log.e("SF", "Errore Stockfish: ${e.message}", e)
+            ""
+        } finally {
+            try { stdin?.close() } catch (_: IOException) {}
+            try { stdout?.close() } catch (_: IOException) {}
+            process?.destroy()
+        }
     }
 }
+
+
+
+
+
+
 
 
 

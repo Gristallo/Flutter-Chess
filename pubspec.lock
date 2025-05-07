@@ -360,10 +360,9 @@ packages:
   stockfish_for_flutter:
     dependency: "direct main"
     description:
-      name: stockfish_for_flutter
-      sha256: "62738a0f66d15b6fc904bfbed6bb41f1fd95c2132d498ecba4d064f9a62742e9"
-      url: "https://pub.dev"
-    source: hosted
+      path: "plugins/stockfish_for_flutter"
+      relative: true
+    source: path
     version: "0.1.2"
   stream_channel:
     dependency: transitive

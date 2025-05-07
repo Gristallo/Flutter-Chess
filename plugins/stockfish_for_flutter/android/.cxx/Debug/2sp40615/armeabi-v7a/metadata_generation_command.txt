@@ -1,0 +1,18 @@
+                        -HC:\Users\xxxle\chess_game\plugins\stockfish_for_flutter\src
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=16
+-DANDROID_PLATFORM=android-16
+-DANDROID_ABI=armeabi-v7a
+-DCMAKE_ANDROID_ARCH_ABI=armeabi-v7a
+-DANDROID_NDK=C:\Users\xxxle\AppData\Local\Android\sdk\ndk\21.1.6352462
+-DCMAKE_ANDROID_NDK=C:\Users\xxxle\AppData\Local\Android\sdk\ndk\21.1.6352462
+-DCMAKE_TOOLCHAIN_FILE=C:\Users\xxxle\AppData\Local\Android\sdk\ndk\21.1.6352462\build\cmake\android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=C:\Users\xxxle\AppData\Local\Android\sdk\cmake\3.22.1\bin\ninja.exe
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=C:\Users\xxxle\chess_game\build\stockfish_for_flutter\intermediates\cxx\Debug\2sp40615\obj\armeabi-v7a
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=C:\Users\xxxle\chess_game\build\stockfish_for_flutter\intermediates\cxx\Debug\2sp40615\obj\armeabi-v7a
+-DCMAKE_BUILD_TYPE=Debug
+-BC:\Users\xxxle\chess_game\plugins\stockfish_for_flutter\android\.cxx\Debug\2sp40615\armeabi-v7a
+-GNinja
+                        Build command args: []
+                        Version: 2

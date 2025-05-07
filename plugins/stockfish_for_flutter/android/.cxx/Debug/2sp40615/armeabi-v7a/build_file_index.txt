@@ -1,0 +1,1 @@
+C:\Users\xxxle\chess_game\plugins\stockfish_for_flutter\src\CMakeLists.txt

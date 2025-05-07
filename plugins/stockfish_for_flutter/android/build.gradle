@@ -1,0 +1,40 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.1.2'
+    }
+}
+
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.loloof64.stockfish_for_flutter'
+    
+    compileSdkVersion 31
+    ndkVersion "21.1.6352462"
+
+    externalNativeBuild {
+        cmake {
+            path "../src/CMakeLists.txt"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion 16
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+

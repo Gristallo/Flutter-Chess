@@ -32,6 +32,7 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   List<chess.Piece> _whiteCaptured = [];
   List<chess.Piece> _blackCaptured = [];
   String? lastComputerMove;
+  bool _isThinking = false;
 
   GameTimer? _gameTimer; 
 
@@ -124,7 +125,7 @@ Widget build(BuildContext context) {
             flex: 2,
             child: AspectRatio(
               aspectRatio: 1.0,
-              child: _buildChessBoard(),
+              child: _buildBoardWithThinkingOverlay(),
             ),
           ),
           Expanded(
@@ -229,6 +230,35 @@ Widget build(BuildContext context) {
     );
   }
 
+  /// Scacchiera + overlay "Sto pensando…"
+Widget _buildBoardWithThinkingOverlay() {
+  return Stack(
+    children: [
+      _buildChessBoard(),              // ← riuso la board originale
+      if (_isThinking)                 // overlay solo mentre pensa
+        AnimatedOpacity(
+          opacity: 0.8,
+          duration: const Duration(milliseconds: 200),
+          child: Container(
+            color: Colors.black87,
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  'Sto pensando…',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
   Widget _pieceImage(chess.Piece piece) {
     String color = piece.color == chess.Color.WHITE ? 'w' : 'b';
     String type = {
@@ -321,55 +351,81 @@ Widget build(BuildContext context) {
   }
 
   // Metodo per fare il movimento del computer
-  void _makeComputerMove() async {
+  Future<void> _makeComputerMove() async {
+  // Mostra "Sto pensando"
+  setState(() => _isThinking = true);
+
+  try {
+    // Genera mosse legali e controlla
     final possibleMoves = _game.generate_moves({'legal': true});
-    if (possibleMoves.isNotEmpty) {
-      chess.Move bestMove;
+    if (possibleMoves.isEmpty) {
+      print("⚠️ Nessuna mossa legale disponibile");
+      return;
+    }
 
-      // Se la modalità è facile, scegli una mossa a caso
-      if (widget.aiDepth == 2) {
-        bestMove = possibleMoves[_random.nextInt(possibleMoves.length)];
+    // Richiedi la mossa all’engine
+    final fen = _game.fen;
+    print("🧠 Invio a Stockfish FEN: $fen");
+    final engine = ChessEngine();
+    String uciMove = await engine.getBestMove(fen, widget.aiDepth);
+    print("🧠 Stockfish raw reply: '$uciMove'");
+
+    // Se torna stringa troppo corta, skippa
+    if (uciMove.length < 4) {
+      print("⚠️ UCI move troppo corta, skippo");
+      return;
+    }
+
+    // Estrai from/to
+    final from = uciMove.substring(0, 2);
+    final to   = uciMove.substring(2, 4);
+    print("🧠 Parsed move: $from → $to");
+
+    //  Prendi i pezzi prima di muovere
+    final movingPiece   = _game.get(from);
+    final capturedPiece = _game.get(to);
+
+    // Prova a muovere
+    final moveResult = _game.move({'from': from, 'to': to});
+    if (moveResult == null) {
+      print("❌ move() ha restituito null per $from → $to");
+      return;
+    }
+
+    if (capturedPiece != null) {
+      _playCaptureSound();
+      if (capturedPiece.color == chess.Color.WHITE) {
+        _whiteCaptured.add(capturedPiece);
       } else {
-        // Se la modalità è medio o difficile, usa Alpha-Beta Pruning
-        bestMove = _findBestMove(possibleMoves, widget.aiDepth);
-      }
-
-      await Future.delayed(const Duration(milliseconds: 500)); // Ritardo per simulare il pensiero dell'IA
-      _game.move(bestMove);
-
-      // Aggiungi la mossa dell'IA nello storico
-      String algebraicNotation = _convertToAlgebraicNotation(
-        _squareFromIndex(bestMove.from),
-        _squareFromIndex(bestMove.to),
-        _game.get(_squareFromIndex(bestMove.from)),
-        _game.get(_squareFromIndex(bestMove.to)),
-        false, // Perché non è una promozione in questo caso
-      );
-      setState(() {
-        lastComputerMove = '${_squareFromIndex(bestMove.from)} → ${_squareFromIndex(bestMove.to)}'; // Registra anche la casella di arrivo
-        _moveHistory.add(algebraicNotation); // Aggiungi la mossa nel registro
-      });
-      _updateGameState();
-    }
-  }
-
-  chess.Move _findBestMove(List<chess.Move> possibleMoves, int depth) {
-    int bestValue = -10000;
-    chess.Move? bestMove;
-
-    for (var move in possibleMoves) {
-      _game.move(move); // Simula la mossa
-      int boardValue = _minimaxAlphaBeta(depth - 1, -10000, 10000, false);
-      _game.undo(); // Annula la mossa
-
-      if (boardValue > bestValue) {
-        bestValue = boardValue;
-        bestMove = move;
+        _blackCaptured.add(capturedPiece);
       }
     }
-    return bestMove!;
-  }
 
+    //  Aggiorna UI
+    setState(() {
+      lastComputerMove = '$from → $to';
+      _moveHistory.add(_convertToAlgebraicNotation(
+        from, to, movingPiece, capturedPiece, false,
+      ));
+      _updateCheckSquare();
+      if (_game.in_check) _playCheckSound();
+      _checkEndGame();
+    });
+
+  } catch (e, st) {
+    // Log completo di qualsiasi eccezione
+    print("🔥 Errore in _makeComputerMove(): $e\n$st");
+  } finally {
+    //  Disattiva overlay "Sto pensando…"
+    setState(() => _isThinking = false);
+    //  Se usi timer, cambia turno anche qui
+    _gameTimer?.switchTurn();
+  }
+}
+
+
+
+  /*
   int _minimaxAlphaBeta(int depth, int alpha, int beta, bool isMaximizingPlayer) {
     if (depth == 0) {
       return _evaluateBoard(); // Valutazione della scacchiera
@@ -407,6 +463,7 @@ Widget build(BuildContext context) {
       return minEval;
     }
   }
+  */
 
   int _evaluateBoard() {
     int evaluation = 0;

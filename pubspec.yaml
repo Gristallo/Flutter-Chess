@@ -10,7 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  stockfish_for_flutter: ^0.1.2
+  stockfish_for_flutter:
+    path: ./plugins/stockfish_for_flutter
   cupertino_icons: ^1.0.8
   chess: ^0.8.1
   audioplayers: ^5.2.1
@@ -28,4 +29,5 @@ flutter:
     - assets/sounds/capture.mp3
     - assets/sounds/move-check.mp3
     - assets/stockfish/
+
 
