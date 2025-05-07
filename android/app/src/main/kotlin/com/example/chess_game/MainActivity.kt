@@ -17,7 +17,7 @@ class MainActivity : FlutterActivity() {
     /*------------------------------------------------------------*/
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        /* copyStockfishToFile()  */            
+        // copyStockfishToFile()  // decommenta se usi l’asset anziché la lib nativa
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -28,6 +28,7 @@ class MainActivity : FlutterActivity() {
                 if (call.method == "getBestMove") {
                     val fen   = call.argument<String>("fen")
                     val depth = call.argument<Int>("depth") ?: 2
+                    val elo   = call.argument<Int>("elo")   ?: 1200
 
                     if (fen == null) {
                         result.error("INVALID_ARGUMENT", "FEN non valido", null)
@@ -35,7 +36,7 @@ class MainActivity : FlutterActivity() {
                     }
 
                     Thread {
-                        val best = getBestMoveFromStockfish(fen, depth)
+                        val best = getBestMoveFromStockfish(fen, depth, elo)
                         runOnUiThread { result.success(best) }
                     }.start()
                 } else {
@@ -55,7 +56,9 @@ class MainActivity : FlutterActivity() {
             try {
                 // unico binario: assets/stockfish/arm64-v8a/stockfish
                 assets.open("stockfish/arm64-v8a/stockfish").use { input ->
-                    dest.outputStream().use { output -> input.copyTo(output) }
+                    dest.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
                 Log.d("SF", "Stockfish copiato.")
             } catch (e: IOException) {
@@ -72,14 +75,14 @@ class MainActivity : FlutterActivity() {
     /*------------------------------------------------------------*/
     /* 2. Lancia Stockfish e restituisce bestmove                 */
     /*------------------------------------------------------------*/
-    private fun getBestMoveFromStockfish(fen: String, depth: Int): String {
-
+    private fun getBestMoveFromStockfish(fen: String, depth: Int, elo: Int): String {
         val enginePath = File(applicationInfo.nativeLibraryDir, "libstockfish.so").absolutePath
         var process: Process? = null
         var stdin: BufferedWriter? = null
         var stdout: BufferedReader? = null
 
         return try {
+            // Avvia il processo Stockfish
             process = ProcessBuilder(enginePath)
                 .redirectErrorStream(true)
                 .start()
@@ -87,17 +90,25 @@ class MainActivity : FlutterActivity() {
             stdin  = process.outputStream.bufferedWriter()
             stdout = process.inputStream.bufferedReader()
 
-            /* handshake UCI */
-            stdin.apply { write("uci\nisready\n"); flush() }
+            // Handshake UCI e impostazione forza
+            stdin.apply {
+                write("uci\n")
+                write("setoption name UCI_LimitStrength value true\n")
+                write("setoption name UCI_Elo value $elo\n")
+                write("isready\n")
+                flush()
+            }
+            // Attendi "readyok"
             while (stdout.readLine() != "readyok") { /* skip */ }
 
-            /* posizione e calcolo */
+            // Invia posizione e avvia il calcolo
             stdin.apply {
                 write("position fen $fen\n")
                 write("go depth $depth\n")
                 flush()
             }
 
+            // Leggi il bestmove
             var line: String?
             var best = ""
             while (stdout.readLine().also { line = it } != null) {
@@ -118,6 +129,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 }
+
 
 
 

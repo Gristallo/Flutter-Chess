@@ -5,13 +5,20 @@ import 'package:audioplayers/audioplayers.dart';
 import '../game_timer.dart';
 import 'package:chess_game/services/chess_engine.dart';
 
+enum Difficulty {
+  facile,
+  medio,
+  difficile,
+}
+
 class ChessBoardScreen extends StatefulWidget {
   final bool vsComputer;
   final int aiDepth;
   final bool useTimer; 
   final int initialTime;
+  final Difficulty? difficulty;
 
-  const ChessBoardScreen({Key? key, required this.vsComputer, this.aiDepth = 2, this.useTimer = false, required this.initialTime}) : super(key: key);
+  const ChessBoardScreen({Key? key, required this.vsComputer, this.aiDepth = 2, this.useTimer = false, required this.initialTime, this.difficulty}) : super(key: key);
 
   @override
   _ChessBoardScreenState createState() => _ChessBoardScreenState();
@@ -61,8 +68,12 @@ void initState() {
 }
 
 
-void _handleGameOver(String winner) {
-  _gameTimer?.stop(); 
+void _handleGameOver(String timedOutPlayer) {
+  _gameTimer?.stop();
+
+
+  final winner = timedOutPlayer == 'Bianco' ? 'Nero' : 'Bianco';
+
   showDialog(
     context: context,
     builder: (_) => AlertDialog(
@@ -73,7 +84,8 @@ void _handleGameOver(String winner) {
           onPressed: () {
             Navigator.of(context).pop();
             setState(() {
-              _game = chess.Chess(); 
+              // Reset della partita
+              _game = chess.Chess();
               selectedRow = null;
               selectedCol = null;
               validMoves = [];
@@ -91,6 +103,7 @@ void _handleGameOver(String winner) {
     ),
   );
 }
+
 
  void _updateTimer(int whiteTime, int blackTime, String currentPlayer) {
   setState(() {
@@ -132,15 +145,20 @@ Widget build(BuildContext context) {
             flex: 1,
             child: Column(
               children: [
-                // Visualizza il timer
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    'Bianco: ${_gameTimer?.formatTime(_gameTimer!.blackTime)}\n'  //NOTA: I timer del bianco e del nero sono invertiti: dopo tantissime prove non riuscivo a risolvere, quindi ho risolto direttamente così (brutalmente xD)
-                    'Nero: ${_gameTimer?.formatTime(_gameTimer!.whiteTime)}',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                // Visualizza il timer solo in 1vs1 con timer attivato
+                if (widget.useTimer && !widget.vsComputer)
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      'Bianco: ${_gameTimer?.formatTime(_gameTimer!.blackTime)}\n' //NOTA: I timer del bianco e del nero sono invertiti: dopo tantissime prove non riuscivo a risolvere, quindi ho risolto direttamente così (brutalmente xD)
+                      'Nero:   ${_gameTimer?.formatTime(_gameTimer!.whiteTime)}',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
+
                 Expanded(child: _buildMoveHistory()),
                 const Divider(),
                 Container(
@@ -155,8 +173,6 @@ Widget build(BuildContext context) {
     ),
   );
 }
-
-
 
   // Metodo per costruire la scacchiera
   Widget _buildChessBoard() {
@@ -367,7 +383,8 @@ Widget _buildBoardWithThinkingOverlay() {
     final fen = _game.fen;
     print("🧠 Invio a Stockfish FEN: $fen");
     final engine = ChessEngine();
-    String uciMove = await engine.getBestMove(fen, widget.aiDepth);
+    int elo = _eloForDifficulty();
+    String uciMove = await engine.getBestMove(fen, widget.aiDepth, elo);
     print("🧠 Stockfish raw reply: '$uciMove'");
 
     // Se torna stringa troppo corta, skippa
@@ -422,8 +439,18 @@ Widget _buildBoardWithThinkingOverlay() {
     _gameTimer?.switchTurn();
   }
 }
-
-
+  int _eloForDifficulty() {
+  switch (widget.difficulty) {
+    case Difficulty.facile:
+      return 800;
+    case Difficulty.medio:
+      return 1400;
+    case Difficulty.difficile:
+      return 2000;
+    default:
+      return 1200;
+  }
+}
 
   /*
   int _minimaxAlphaBeta(int depth, int alpha, int beta, bool isMaximizingPlayer) {
@@ -534,40 +561,43 @@ Widget _buildBoardWithThinkingOverlay() {
 
   // Metodo per visualizzare i pezzi catturati
   Widget _buildCapturedPieces() {
-    int pieceValue(chess.PieceType type) {
-      switch (type) {
-        case chess.PieceType.PAWN:
-          return 1;
-        case chess.PieceType.KNIGHT:
-        case chess.PieceType.BISHOP:
-          return 3;
-        case chess.PieceType.ROOK:
-          return 5;
-        case chess.PieceType.QUEEN:
-          return 9;
-        default:
-          return 0;
-      }
+  int pieceValue(chess.PieceType type) {
+    switch (type) {
+      case chess.PieceType.PAWN:
+        return 1;
+      case chess.PieceType.KNIGHT:
+      case chess.PieceType.BISHOP:
+        return 3;
+      case chess.PieceType.ROOK:
+        return 5;
+      case chess.PieceType.QUEEN:
+        return 9;
+      default:
+        return 0;
     }
-
-    int whiteScore = _whiteCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
-    int blackScore = _blackCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
-
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("Bianco (Tot: $whiteScore):"),
-          Wrap(children: _whiteCaptured.map(_pieceImage).toList()),
-          const SizedBox(height: 8),
-          Text("Nero (Tot: $blackScore):"),
-          Wrap(children: _blackCaptured.map(_pieceImage).toList()),
-        ],
-      ),
-    );
   }
 
+  // _blackCaptured = pezzi che il Bianco ha preso
+  // _whiteCaptured = pezzi che il Nero ha preso
+  int whiteTakesScore = _blackCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
+  int blackTakesScore = _whiteCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
+
+  return Padding(
+    padding: const EdgeInsets.all(8.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Mostra i pezzi che il Bianco ha catturato
+        Text("Bianco (Tot: $whiteTakesScore):"),
+        Wrap(children: _blackCaptured.map(_pieceImage).toList()),
+        const SizedBox(height: 8),
+        // Mostra i pezzi che il Nero ha catturato
+        Text("Nero (Tot: $blackTakesScore):"),
+        Wrap(children: _whiteCaptured.map(_pieceImage).toList()),
+      ],
+    ),
+  );
+}
   // Metodo per aggiornare lo stato del gioco
   void _updateGameState() {
     setState(() {

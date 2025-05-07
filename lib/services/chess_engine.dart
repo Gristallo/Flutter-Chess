@@ -5,13 +5,14 @@ class ChessEngine {
 
   /// Restituisce la mossa migliore in UCI (es. "e2e4") per la FEN data,
   /// alla profondità specificata.
-  Future<String> getBestMove(String fen, int depth) async {
+  Future<String> getBestMove(String fen, int depth, int elo) async {
     try {
       final String bestMove = await platform.invokeMethod(
         'getBestMove',
         {
           "fen": fen,
           "depth": depth,
+          "elo": elo,
         },
       );
       return bestMove;

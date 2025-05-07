@@ -9,24 +9,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedDifficulty = 'facile';
+  String _selectedDifficultyLabel = 'Facile'; 
   int _selectedTime = 3;
   bool _useTimer = false;
 
   // Funzione per avviare il gioco 1vs1
   void _start1v1Game(BuildContext context) {
-    int selectedTimeInSeconds = _selectedTime == 3
-        ? 180
-        : _selectedTime == 5
-            ? 300
-            : 600;
+    int selectedTimeInSeconds =
+        _selectedTime == 3 ? 180 : _selectedTime == 5 ? 300 : 600;
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChessBoardScreen(
-          vsComputer: false, // Per 1vs1, il gioco non deve essere contro il PC
-          aiDepth: 0, // Non ha senso passare aiDepth in modalità 1vs1
+          vsComputer: false,
+          aiDepth: 0,
           useTimer: _useTimer,
           initialTime: selectedTimeInSeconds,
         ),
@@ -35,33 +32,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Funzione per avviare il gioco contro il PC con la difficoltà scelta
-  void _startGameAgainstComputer(BuildContext context, String difficulty) {
-    int selectedTimeInSeconds = _selectedTime == 3
-        ? 180
-        : _selectedTime == 5
-            ? 300
-            : 600;
+  void _startGameAgainstComputer(BuildContext context, Difficulty difficulty) {
+    int selectedTimeInSeconds =
+        _selectedTime == 3 ? 180 : _selectedTime == 5 ? 300 : 600;
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChessBoardScreen(
-          vsComputer: true, // Attiva la modalità contro il PC
-          aiDepth: _getAiDepth(difficulty), // Passa la difficoltà
+          vsComputer: true,
+          aiDepth: _getAiDepth(difficulty),
           useTimer: _useTimer,
           initialTime: selectedTimeInSeconds,
+          difficulty: difficulty,
         ),
       ),
     );
   }
 
-  int _getAiDepth(String difficulty) {
-    if (difficulty == 'facile') {
-      return 2;
-    } else if (difficulty == 'medio') {
-      return 4;
-    } else {
-      return 6;
+  int _getAiDepth(Difficulty difficulty) {
+    switch (difficulty) {
+      case Difficulty.facile:
+        return 2;
+      case Difficulty.medio:
+        return 4;
+      case Difficulty.difficile:
+        return 6;
     }
   }
 
@@ -123,30 +119,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: const Text('Facile'),
                 onTap: () {
                   setState(() {
-                    _selectedDifficulty = 'facile';
+                    _selectedDifficultyLabel = 'Facile';
                   });
                   Navigator.of(context).pop();
-                  _startGameAgainstComputer(context, 'facile'); // Passa la difficoltà 'facile'
+                  _startGameAgainstComputer(context, Difficulty.facile);
                 },
               ),
               ListTile(
                 title: const Text('Medio'),
                 onTap: () {
                   setState(() {
-                    _selectedDifficulty = 'medio';
+                    _selectedDifficultyLabel = 'Medio';
                   });
                   Navigator.of(context).pop();
-                  _startGameAgainstComputer(context, 'medio'); // Passa la difficoltà 'medio'
+                  _startGameAgainstComputer(context, Difficulty.medio);
                 },
               ),
               ListTile(
                 title: const Text('Difficile'),
                 onTap: () {
                   setState(() {
-                    _selectedDifficulty = 'difficile';
+                    _selectedDifficultyLabel = 'Difficile';
                   });
                   Navigator.of(context).pop();
-                  _startGameAgainstComputer(context, 'difficile'); // Passa la difficoltà 'difficile'
+                  _startGameAgainstComputer(context, Difficulty.difficile);
                 },
               ),
             ],
@@ -190,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Image.asset('assets/images/chess_logo.png', height: 120),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: () => _start1v1Game(context), // Avvia il gioco 1vs1
+                onPressed: () => _start1v1Game(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueGrey[800], 
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
@@ -199,9 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: () {
-                  _showDifficultyDialog(context); // Mostra il dialogo per selezionare la difficoltà
-                },
+                onPressed: () => _showDifficultyDialog(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueGrey[800], 
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
@@ -209,6 +203,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Text('Sfida il PC', style: TextStyle(fontSize: 18)),
               ),
               const SizedBox(height: 30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Difficoltà attuale: $_selectedDifficultyLabel', style: const TextStyle(color: Colors.white)),
+                ],
+              ),
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -220,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         _useTimer = value;
                       });
                       if (_useTimer) {
-                        _showTimerDialog(); // Mostra il dialogo per il timer quando attivato
+                        _showTimerDialog();
                       }
                     },
                     activeColor: Colors.white,
@@ -235,6 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
 
 
 
