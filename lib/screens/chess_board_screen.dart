@@ -130,47 +130,99 @@ Widget build(BuildContext context) {
       title: Text(_getTurnText()),
       backgroundColor: Colors.grey[700],
     ),
-    body: Container(
-      color: Colors.grey[600],
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: AspectRatio(
-              aspectRatio: 1.0,
-              child: _buildBoardWithThinkingOverlay(),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Column(
-              children: [
-                // Visualizza il timer solo in 1vs1 con timer attivato
-                if (widget.useTimer && !widget.vsComputer)
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      'Bianco: ${_gameTimer?.formatTime(_gameTimer!.blackTime)}\n' //NOTA: I timer del bianco e del nero sono invertiti: dopo tantissime prove non riuscivo a risolvere, quindi ho risolto direttamente così (brutalmente xD)
-                      'Nero:   ${_gameTimer?.formatTime(_gameTimer!.whiteTime)}',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+    body: LayoutBuilder(
+      builder: (ctx, constraints) {
+        final isPortrait = constraints.maxWidth < 600;
+        return Container(
+          color: Colors.grey[600],
+          child: isPortrait
+              ? Column(
+                  children: [
+                    Flexible(
+                      flex: 6,
+                      child: AspectRatio(
+                        aspectRatio: 1.0,
+                        child: _buildBoardWithThinkingOverlay(),
                       ),
                     ),
-                  ),
-
-                Expanded(child: _buildMoveHistory()),
-                const Divider(),
-                Container(
-                  color: Colors.grey[500],
-                  child: _buildCapturedPieces(),
+                    Flexible(flex: 4, child: _buildBottomTabs()),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: AspectRatio(
+                        aspectRatio: 1.0,
+                        child: _buildBoardWithThinkingOverlay(),
+                      ),
+                    ),
+                    Expanded(flex: 2, child: _buildSidePanel()),
+                  ],
                 ),
-              ],
+        );
+      },
+    ),
+  );
+}
+
+Widget _buildBottomTabs() {
+  return DefaultTabController(
+    length: 2,
+    child: Column(
+      children: [
+
+        if (widget.useTimer && !widget.vsComputer)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              'Bianco: ${_gameTimer?.formatTime(_gameTimer!.blackTime)}   '
+              'Nero:   ${_gameTimer?.formatTime(_gameTimer!.whiteTime)}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
-        ],
-      ),
+
+        Container(
+          color: Colors.grey[800],
+          child: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.list), text: 'Mosse'),
+              Tab(icon: Icon(Icons.pie_chart), text: 'Catturati'),
+            ],
+          ),
+        ),
+
+        Expanded(
+          child: TabBarView(
+            children: [
+              _buildMoveHistory(),
+              _buildCapturedPieces(),
+            ],
+          ),
+        ),
+      ],
     ),
+  );
+}
+
+
+Widget _buildSidePanel() {
+  return Column(
+    children: [
+      if (widget.useTimer)
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(
+            'Bianco: ${_gameTimer?.formatTime(_gameTimer!.blackTime)}\n' //NOTA: I timer del bianco e del nero sono invertiti: dopo tantissime prove non riuscivo a risolvere, quindi ho risolto direttamente così (brutalmente xD)
+            'Nero:   ${_gameTimer?.formatTime(_gameTimer!.whiteTime)}',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
+      const Divider(color: Colors.black54),
+      Expanded(child: _buildMoveHistory()),
+      const Divider(color: Colors.black54),
+      Expanded(child: _buildCapturedPieces()),
+    ],
   );
 }
 
@@ -442,7 +494,7 @@ Widget _buildBoardWithThinkingOverlay() {
   int _eloForDifficulty() {
   switch (widget.difficulty) {
     case Difficulty.facile:
-      return 800;
+      return 600;
     case Difficulty.medio:
       return 1400;
     case Difficulty.difficile:
@@ -561,42 +613,47 @@ Widget _buildBoardWithThinkingOverlay() {
 
   // Metodo per visualizzare i pezzi catturati
   Widget _buildCapturedPieces() {
-  int pieceValue(chess.PieceType type) {
-    switch (type) {
-      case chess.PieceType.PAWN:
-        return 1;
-      case chess.PieceType.KNIGHT:
-      case chess.PieceType.BISHOP:
-        return 3;
-      case chess.PieceType.ROOK:
-        return 5;
-      case chess.PieceType.QUEEN:
-        return 9;
-      default:
-        return 0;
-    }
-  }
 
-  // _blackCaptured = pezzi che il Bianco ha preso
-  // _whiteCaptured = pezzi che il Nero ha preso
-  int whiteTakesScore = _blackCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
-  int blackTakesScore = _whiteCaptured.fold(0, (sum, p) => sum + pieceValue(p.type));
+  int whiteScore = _blackCaptured.fold(0, (sum, p) => sum + _pieceValue(p.type));
+  int blackScore = _whiteCaptured.fold(0, (sum, p) => sum + _pieceValue(p.type));
+
+
+  int diff = whiteScore - blackScore;
+
+  String whiteDiff = diff >= 0 ? '+$diff' : diff.toString();
+  String blackDiff = (-diff) >= 0 ? '+${-diff}' : (-diff).toString();
 
   return Padding(
     padding: const EdgeInsets.all(8.0),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Mostra i pezzi che il Bianco ha catturato
-        Text("Bianco (Tot: $whiteTakesScore):"),
+        // Bianco: mostra saldo e pezzi che Bianco ha catturato
+        Text("Bianco $whiteDiff"),
         Wrap(children: _blackCaptured.map(_pieceImage).toList()),
         const SizedBox(height: 8),
-        // Mostra i pezzi che il Nero ha catturato
-        Text("Nero (Tot: $blackTakesScore):"),
+        // Nero: mostra saldo e pezzi che Nero ha catturato
+        Text("Nero $blackDiff"),
         Wrap(children: _whiteCaptured.map(_pieceImage).toList()),
       ],
     ),
   );
+}
+
+int _pieceValue(chess.PieceType type) {
+  switch (type) {
+    case chess.PieceType.PAWN:
+      return 1;
+    case chess.PieceType.KNIGHT:
+    case chess.PieceType.BISHOP:
+      return 3;
+    case chess.PieceType.ROOK:
+      return 5;
+    case chess.PieceType.QUEEN:
+      return 9;
+    default:
+      return 0;
+  }
 }
   // Metodo per aggiornare lo stato del gioco
   void _updateGameState() {

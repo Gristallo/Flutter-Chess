@@ -53,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _getAiDepth(Difficulty difficulty) {
     switch (difficulty) {
       case Difficulty.facile:
-        return 2;
+        return 1;
       case Difficulty.medio:
         return 4;
       case Difficulty.difficile:
