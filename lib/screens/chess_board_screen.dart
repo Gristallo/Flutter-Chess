@@ -25,6 +25,7 @@ class ChessBoardScreen extends StatefulWidget {
 }
 
 class _ChessBoardScreenState extends State<ChessBoardScreen> {
+  bool? _playAsWhite;
   chess.Chess _game = chess.Chess();
   int? selectedRow;
   int? selectedCol;
@@ -58,14 +59,65 @@ class _ChessBoardScreenState extends State<ChessBoardScreen> {
   @override
 void initState() {
   super.initState();
+
+  if (widget.vsComputer) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      bool tempChoice = true; 
+
+      showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text("Scegli il tuo colore"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<bool>(
+                    title: const Text("Bianco"),
+                    value: true,
+                    groupValue: tempChoice,
+                    onChanged: (v) => setStateDialog(() => tempChoice = v!),
+                  ),
+                  RadioListTile<bool>(
+                    title: const Text("Nero"),
+                    value: false,
+                    groupValue: tempChoice,
+                    onChanged: (v) => setStateDialog(() => tempChoice = v!),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _playAsWhite = tempChoice;
+                    Navigator.of(context).pop();
+
+                    if (_playAsWhite == false) {
+                      _makeComputerMove();
+                    }
+                  },
+                  child: const Text("Inizia"),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    });
+  }
+
   if (!widget.vsComputer && widget.useTimer) {
     _gameTimer = GameTimer(
-      onTimeUpdate: _updateTimer,    
-      onGameOver: _handleGameOver,   
+      onTimeUpdate: _updateTimer,
+      onGameOver: _handleGameOver,
     );
-    _gameTimer?.start(widget.initialTime);  
+    _gameTimer?.start(widget.initialTime);
   }
 }
+
+
 
 
 void _handleGameOver(String timedOutPlayer) {
@@ -409,7 +461,9 @@ Widget _buildBoardWithThinkingOverlay() {
 
             _gameTimer?.switchTurn();
 
-            if (widget.vsComputer && _game.turn == chess.Color.BLACK) {
+            final aiColor = (_playAsWhite! ? chess.Color.BLACK : chess.Color.WHITE);
+
+            if (widget.vsComputer && _game.turn == aiColor) {
               _makeComputerMove();
             }
           }
@@ -600,10 +654,15 @@ Widget _buildBoardWithThinkingOverlay() {
   }
 
   String _indexToSquare(int row, int col) {
-    String file = String.fromCharCode('a'.codeUnitAt(0) + col);
-    String rank = (8 - row).toString();
-    return '$file$rank';
+  // Se stiamo sfidando il PC e l’utente è Nero, rovesciamo riga e colonna
+  if (widget.vsComputer && _playAsWhite == false) {
+    row = 7 - row;
+    col = 7 - col;
   }
+  final file = String.fromCharCode('a'.codeUnitAt(0) + col);
+  final rank = (8 - row).toString();
+  return '$file$rank';
+}
 
   String _squareFromIndex(int index) {
     final file = String.fromCharCode('a'.codeUnitAt(0) + (index % 16));
